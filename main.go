@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"sort"
 	"log"
-	"strings"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -40,10 +40,10 @@ func getFeedPosts(feed *gofeed.Feed) []models.Post {
 	items := feed.Items
 	for _, item := range items {
 		posts = append(posts, models.Post{
-			Date:    *item.PublishedParsed,
-			Author:  item.Author.Name,
-			Title:   item.Title,
-			Content: item.Description,
+			Date:     *item.PublishedParsed,
+			Author:   item.Author.Name,
+			Title:    item.Title,
+			Content:  item.Description,
 			PostLink: item.Link,
 		})
 	}
@@ -53,36 +53,54 @@ func getFeedPosts(feed *gofeed.Feed) []models.Post {
 func GetPosts(w http.ResponseWriter, r *http.Request, c *cache.Cache, id func() string, rss *gofeed.Parser) {
 	var err error
 
-//	postCountToReturn := defaultPostCount
+	postCountToReturn := defaultPostCount
 	if countStr := r.FormValue("count"); countStr != "" {
 		count, _ := strconv.Atoi(countStr)
 		if count != 0 {
-//			postCountToReturn = count
+			postCountToReturn = count
 		}
 	}
 
-	// TODO: Do something with this
-//	pagingToken := r.FormValue("continue")
+	pagingToken := r.FormValue("continue")
 
 	feedUrlsRaw := r.FormValue("feeds")
-	if feedUrlsRaw == "" {
+	if feedUrlsRaw == "" && pagingToken == "" {
 		http.Error(w, "Param 'feeds' required", http.StatusNotFound)
 	}
 
 	feedUrls := strings.Split(feedUrlsRaw, ",")
 
-	var postsToReturn []models.Post
-	for _, url := range feedUrls {
-		feed, err := rss.ParseURL(url)
-		if err != nil {
-			continue
+	var posts []models.Post
+	if pagingToken == "" {
+		for _, url := range feedUrls {
+			feed, err := rss.ParseURL(url)
+			if err != nil {
+				continue
+			}
+			posts = append(posts, getFeedPosts(feed)...)
 		}
-		postsToReturn = append(postsToReturn, getFeedPosts(feed)...)
+		sort.Sort(ByTime(posts))
+	} else {
+		if v, ok := c.Get(pagingToken); ok {
+			posts = v.([]models.Post)
+		}
 	}
-	sort.Sort(ByTime(postsToReturn))
 
-	// TODO: Pagination
+	var postsToReturn []models.Post
+	var remainingPosts []models.Post
+	if len(posts) > postCountToReturn {
+		postsToReturn = posts[:postCountToReturn]
+		remainingPosts = posts[postCountToReturn:]
+	} else {
+		postsToReturn = posts
+	}
+
 	var nextURL string
+	if len(remainingPosts) != 0 {
+		nextToken := id()
+		nextURL = baseURL + "/v1/posts?continue=" + nextToken + "&count=" + strconv.Itoa(postCountToReturn)
+		c.Set(nextToken, remainingPosts, cache.DefaultExpiration)
+	}
 	cRes := models.ClientResp{postsToReturn, nextURL}
 	res, err := json.Marshal(cRes)
 	if err != nil {
