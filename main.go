@@ -39,14 +39,18 @@ func getFeedPosts(feed *gofeed.Feed) []models.Post {
 	var posts []models.Post
 	items := feed.Items
 	for _, item := range items {
-		posts = append(posts, models.Post{
+		post := models.Post{
 			Date:     *item.PublishedParsed,
 			Author:   item.Author.Name,
 			Title:    item.Title,
 			Content:  item.Description,
 			PostLink: item.Link,
 			Platform: models.PlatformRSS,
-		})
+		}
+		if item.Image != nil {
+			post.HeroImg = item.Image.URL
+		}
+		posts = append(posts, post)
 	}
 	return posts
 }
