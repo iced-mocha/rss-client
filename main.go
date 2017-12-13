@@ -45,6 +45,7 @@ func getFeedPosts(feed *gofeed.Feed) []models.Post {
 			Title:    item.Title,
 			Content:  item.Description,
 			PostLink: item.Link,
+			Platform: models.PlatformRSS,
 		})
 	}
 	return posts
